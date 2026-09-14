@@ -1,8 +1,8 @@
 # HotMicCore
 
-HotMicCore allows you to integrate the HotMic stream experience into your app with a fully custom user interface. Use this framework to get streams, create a stream session, and build your live stream experience.
+HotMicCore lets you integrate the HotMic stream experience with a fully custom user interface—or as a **data-only** layer behind a host-owned player and screens (for example Bleacher Report–class apps). Use this framework to fetch streams, create a stream session, and drive chat, polls, and moderation from your own UI.
 
-See [MIGRATION.md](MIGRATION.md) to migrate to HotMicCore from HotMicMediaPlayer.
+Migrating from HotMicMediaPlayer? Start with [MIGRATION.md](MIGRATION.md) (integration paths, session recipe, playback URLs, auth refresh, and a BR verification checklist).
 
 ## Features
 
@@ -25,6 +25,8 @@ The Example app demonstrates loading streams, starting a stream session, monitor
 ## Installation
 
 In Xcode, select File > Add Package Dependencies, enter the package URL `https://github.com/hotmic-wp/hotmic-core-ios`, select Up to Next Major, and add HotMicCore to your app target.
+
+During early rollout the public `1.0.0` binary asset may be unavailable; see the [distribution caveat in MIGRATION.md](MIGRATION.md#distribution-caveat-pilot).
 
 ## Usage
 
@@ -56,7 +58,7 @@ Create the access token on your backend for the authenticated user by signing an
 }
 ```
 
-`profile_pic` and `badge` are optional. Create a new `HotMicClient` when the access token changes.
+`profile_pic` and `badge` are optional. Create a new `HotMicClient` when the access token changes (for example after an `unauthorized` error). There is no MediaPlayer-style auth observer.
 
 Logging is disabled by default. To enable diagnostics, specify `logLevel` in the initializer.
 
@@ -91,10 +93,10 @@ if page.pagination.hasNext {
 Fetch one stream by ID:
 
 ```swift
-let stream = try await hotMic.fetchStream(id: streamID)
+let summary = try await hotMic.fetchStream(id: streamID) // HotMicStreamSummary
 ```
 
-These requests return `HotMicStreamSummary`; full `HotMicStream` details are provided when a stream session is started.
+These requests return `HotMicStreamSummary`. Full `HotMicStream` details (including `hlsURL` / `vodURL`) come from the session `Snapshot` after `start()` and from `streamUpdated` events—not from discovery APIs.
 
 ### Stream Session
 
@@ -138,7 +140,7 @@ final class StreamController {
 }
 ```
 
-Keep a strong reference to the session and begin consuming `events`, or assign `eventHandler`, before starting it.
+Keep a strong reference to the session and begin consuming `events`, or assign `eventHandler`, **before** starting it. Session APIs are `@MainActor`. A stopped or failed session is one-shot—create a new session rather than calling `start()` again.
 
 `start()` returns the initial stream, authenticated user, chat messages, polls, and participants. Session events report subsequent changes.
 
@@ -151,11 +153,13 @@ Events also report changes to session content:
 - `.pollCreated`, `.pollUpdated`, and `.pollDeleted` report poll changes.
 - `.participantsUpdated` reports changes to participant groups.
 
-Call `stop()` and release the session when the experience closes. A stopped or failed session cannot be started again.
+Call `stop()` and release the session when the experience closes.
+
+For host-owned playback, select `stream.hlsURL` (live) or `stream.vodURL` (VOD) from the snapshot / `streamUpdated` event and feed your own player. HotMicCore does not require a specific player SDK.
 
 ### Chat
 
-Chat messages are included in the initial session snapshot and updated through chat events.
+Chat messages are included in the initial session snapshot and updated through chat events. All chat calls use the `session.chat` prefix.
 
 Send a message after the session has started:
 
@@ -163,7 +167,7 @@ Send a message after the session has started:
 let message = try await session.chat.sendChatMessage("Hello!")
 ```
 
-Insert the chat message immediately as it will not be delivered through session events.
+Insert the chat message immediately (optimistic local update)—your own send/react/delete results are not echoed through session events.
 
 Delete a chat message:
 
@@ -171,7 +175,7 @@ Delete a chat message:
 try await session.chat.deleteChatMessage(chatID: message.id)
 ```
 
-Remove the message immediately as it will not be delivered through session events.
+Remove the message immediately (optimistic local update).
 
 Report a chat message as inappropriate:
 
@@ -189,7 +193,7 @@ let reaction = try await session.chat.addChatMessageReaction(.like, to: message.
 try await session.chat.removeChatMessageReaction(.like, from: message.id)
 ```
 
-Apply the change immediately as they will not be delivered through session events.
+Apply the change immediately (optimistic local update).
 
 Fetch reaction details:
 
