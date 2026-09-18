@@ -199,7 +199,7 @@ try await session.chat.removeChatMessageReaction(.like, from: message.id)
 
 Apply the change immediately as they will not be delivered through session events.
 
-Reactions added by other users arrive in `.chatBatchReceived` as `HotMicChatMessage.Batch.reactions`.
+Reactions added by other users arrive in `.chatBatchReceived` as `HotMicChatMessage.Batch.reactions`; reactions they remove arrive as `.chatMessageReactionDeleted`.
 
 Fetch reaction details:
 
