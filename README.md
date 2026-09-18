@@ -20,7 +20,7 @@ See [MIGRATION.md](MIGRATION.md) to migrate to HotMicCore from HotMicMediaPlayer
 
 ## Example
 
-The Example app demonstrates loading streams, starting a stream session, monitoring session state, playing video, and sending chat messages. Download or clone this repository, open the Xcode project, and run the app. You can add your API key and access token in the Settings screen.
+The Example app demonstrates loading streams, starting a stream session, monitoring session state, playing video, and sending chat messages. Download or clone this repository, open the Xcode project, and run the app. Enter your API key and access token in the Settings screen (they are kept in memory only); for automated runs they can also be passed through the launch environment as `HOTMIC_CORE_API_KEY` and `HOTMIC_CORE_ACCESS_TOKEN`.
 
 The Example app itself requires Xcode 26 and an iOS 26 simulator or device; the framework supports iOS 16 and later.
 
