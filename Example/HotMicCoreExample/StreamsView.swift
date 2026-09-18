@@ -15,12 +15,18 @@ struct StreamsView: View {
                     ProgressView("Loading streams…")
                 } else if model.streams.isEmpty {
                     ContentUnavailableView {
-                        Text("No Streams")
+                        Text(model.needsCredentials ? "Add Credentials" : "No Streams")
                     } description: {
-                        Text(model.errorMessage ?? "There are no streams available right now.")
+                        Text(model.needsCredentials
+                            ? "Enter your API key and access token in Settings."
+                            : model.errorMessage ?? "There are no streams available right now.")
                     } actions: {
-                        Button("Try Again") {
-                            Task { await model.refresh() }
+                        if model.needsCredentials {
+                            Button("Open Settings") { isShowingSettings = true }
+                        } else {
+                            Button("Try Again") {
+                                Task { await model.refresh() }
+                            }
                         }
                     }
                 } else {

@@ -160,5 +160,7 @@ try await session.blockUserFromStreamChat(userID: userID)
 | Chat reaction | `HotMicChatMessage.Reaction` |
 | Poll | `HotMicPoll` |
 | Participant | `HotMicParticipant` |
+| Participant groups (host, cohosts, guests, waiting, room) | `HotMicParticipant.Snapshot` |
+| Chat batch delivered by `chatBatchReceived` | `HotMicChatMessage.Batch` |
 | User details | `HotMicUser` |
 | SDK/network error | `HotMicError` |

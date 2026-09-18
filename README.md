@@ -20,7 +20,9 @@ See [MIGRATION.md](MIGRATION.md) to migrate to HotMicCore from HotMicMediaPlayer
 
 ## Example
 
-The Example app demonstrates loading streams, starting a stream session, monitoring session state, playing video, and sending chat messages. Download or clone this repository, open the Xcode project, and run the app. You can add your API key and access token in the Settings screen.
+The Example app demonstrates loading streams, starting a stream session, monitoring session state, playing video, and sending chat messages. Download or clone this repository, open the Xcode project, and run the app. Enter your API key and access token in the Settings screen (they are kept in memory only); for automated runs they can also be passed through the launch environment as `HOTMIC_CORE_API_KEY` and `HOTMIC_CORE_ACCESS_TOKEN`.
+
+The Example app itself requires Xcode 26 and an iOS 26 simulator or device; the framework supports iOS 16 and later.
 
 ## Installation
 
@@ -58,7 +60,11 @@ Create the access token on your backend for the authenticated user by signing an
 
 `profile_pic` and `badge` are optional. Create a new `HotMicClient` when the access token changes.
 
-Logging is disabled by default. To enable diagnostics, specify `logLevel` in the initializer.
+The client always talks to the production HotMic service at `https://api.hotmic.io`; use a separate API key for staging tenants.
+
+Logging is disabled by default. To enable diagnostics, specify `logLevel` in the initializer. Log lines are written to the unified log (OSLog) under the subsystem `io.hotmic.HotMicCore` and describe request starts and results only; credentials, headers, and bodies are never logged.
+
+If the access token is missing, expired, malformed, or signed with the wrong secret, `fetchStreams` and chat operations fail with `HotMicError.unauthorized`, but a stream session still starts as an anonymous guest whose `HotMicUser.userRestrictions` is `.viewAndPollsOnly`. Check `Snapshot.user` after `start()` if your app must distinguish an authenticated viewer from a guest.
 
 ### Get Streams
 
@@ -94,7 +100,7 @@ Fetch one stream by ID:
 let stream = try await hotMic.fetchStream(id: streamID)
 ```
 
-These requests return `HotMicStreamSummary`; full `HotMicStream` details are provided when a stream session is started.
+These requests return `HotMicStreamSummary`. Summaries returned by `fetchStreams(matching:)` do not include playback URLs; `fetchStream(id:)` includes `hlsURL` and `vodURL`, and the full `HotMicStream` (which adds `endThumbnail`, `videoOrientation`, and `shareText`) is provided when a stream session is started.
 
 ### Stream Session
 
@@ -140,7 +146,9 @@ final class StreamController {
 
 Keep a strong reference to the session and begin consuming `events`, or assign `eventHandler`, before starting it.
 
-`start()` returns the initial stream, authenticated user, chat messages, polls, and participants. Session events report subsequent changes.
+`start()` returns the initial stream, authenticated user, chat messages, polls, and participants. Session events report subsequent changes; chat and poll changes are polled about every 3 seconds and participant changes about every 2 minutes. While your app is in the background polling pauses, and on return the session fetches everything that happened in between.
+
+`events` is a single-consumer `AsyncStream`; use either `events` or `eventHandler`, not both.
 
 You can monitor `.stateChanged` events for transitions between `session.state` and `.connectionChanged` to determine whether polling is connected, reconnecting, or disconnected.
 
@@ -163,7 +171,7 @@ Send a message after the session has started:
 let message = try await session.chat.sendChatMessage("Hello!")
 ```
 
-Insert the chat message immediately as it will not be delivered through session events.
+Insert the chat message immediately as it will not be delivered through session events. Validate the text in your app before sending; the service does not reject empty messages.
 
 Delete a chat message:
 
@@ -190,6 +198,8 @@ try await session.chat.removeChatMessageReaction(.like, from: message.id)
 ```
 
 Apply the change immediately as they will not be delivered through session events.
+
+Reactions added by other users arrive in `.chatBatchReceived` as `HotMicChatMessage.Batch.reactions`; reactions they remove arrive as `.chatMessageReactionDeleted`.
 
 Fetch reaction details:
 
@@ -237,6 +247,19 @@ try await session.makeUserModerator(userID: userID)
 try await session.blockUserFromStreamChat(userID: userID)
 ```
 
+### Errors
+
+Every throwing call throws `HotMicError`:
+
+- `unauthorized` — the access token was rejected.
+- `forbidden(message:)` — the service refused the action for this user.
+- `server(statusCode:message:)` — any other non-success response; `message` carries the service's text when there is one.
+- `transport(description:)` — the request could not reach the service (offline, DNS, timeout).
+- `cancelled` — the calling task was cancelled, or the session was stopped while starting.
+- `invalidRequest` — the query could not be built (for example `limit` or `page` below 1).
+- `decoding(description:)` — the response could not be parsed.
+- `invalidSessionState` — `start()` was called on a session that is already starting, active, stopped, or failed.
+
 ### Completion Handlers
 
 Each asynchronous function also has a completion-handler alternative:
@@ -245,9 +268,9 @@ Each asynchronous function also has a completion-handler alternative:
 hotMic.fetchStreams { result in
     switch result {
     case .success(let page):
-        // Display page.streams.
+        display(page.streams)
     case .failure(let error):
-        // Handle HotMicError.
+        handle(error)
     }
 }
 ```
@@ -264,9 +287,9 @@ session.eventHandler = { [weak self] event in
 session.start { result in
     switch result {
     case .success(let snapshot):
-        // Display the initial session state.
+        display(snapshot)
     case .failure(let error):
-        // Handle HotMicError.
+        handle(error)
     }
 }
 ```
