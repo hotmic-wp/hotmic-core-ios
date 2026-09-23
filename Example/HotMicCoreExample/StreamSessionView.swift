@@ -16,10 +16,48 @@ struct StreamSessionView: View {
     var body: some View {
         List {
             Section {
-                StreamVideoPlayerView(stream: model.stream)
-                    .listRowInsets(.init())
+                if model.playbackEnded {
+                    Text(model.statusText)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .background(.black)
+                        .listRowInsets(.init())
+                } else {
+                    StreamVideoPlayerView(stream: model.stream)
+                        .listRowInsets(.init())
+                }
             } footer: {
                 Text(model.statusText)
+            }
+
+            if let participants = model.participants {
+                Section("Participants") {
+                    Text("Host: \(participants.host.name ?? "Host")")
+                    Text(
+                        "Room \(participants.room.count) · Cohosts \(participants.cohosts.count) · " +
+                            "Guests \(participants.guests.count) · Waiting \(participants.waiting.count)"
+                    )
+                        .font(.caption)
+                }
+            }
+
+            if !model.polls.isEmpty {
+                Section("Polls") {
+                    ForEach(model.polls, id: \.id) { poll in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(poll.question ?? "Poll").font(.headline)
+                            Text("\(poll.responses) responses\(poll.closed ? " · Closed" : "")")
+                                .font(.caption).foregroundStyle(.secondary)
+                            ForEach(poll.options, id: \.id) { option in
+                                Button("\(option.answer) (\(option.responses))") {
+                                    Task { await model.answer(poll, option: option) }
+                                }
+                                .disabled(!model.canAnswer(poll))
+                            }
+                        }
+                    }
+                }
             }
 
             if !model.isStarting {
@@ -29,8 +67,22 @@ struct StreamSessionView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(model.chatMessages, id: \.id) { message in
-                            ChatMessageRow(message: message)
+                            ChatMessageRow(message: message, model: model)
                         }
+                    }
+                }
+            }
+
+            Section {
+                DisclosureGroup("Event trace (\(model.eventTrace.count))") {
+                    ForEach(model.eventCounts.keys.sorted(), id: \.self) { key in
+                        Text("\(key): \(model.eventCounts[key, default: 0])")
+                            .font(.caption.monospacedDigit())
+                    }
+                    ForEach(model.eventTrace) { entry in
+                        Text("\(entry.time.formatted(date: .omitted, time: .standard))  \(entry.text)")
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
                     }
                 }
             }
@@ -63,8 +115,10 @@ struct StreamSessionView: View {
 
 private struct ChatMessageRow: View {
     let message: HotMicChatMessage
+    let model: StreamSessionModel
 
     var body: some View {
+        let name = Text(message.userName).font(.headline)
         HStack(alignment: .top, spacing: 10) {
             AsyncImage(url: message.profilePic) { image in
                 image.resizable().scaledToFill()
@@ -75,7 +129,35 @@ private struct ChatMessageRow: View {
             .frame(width: 22, height: 22)
             .clipShape(.circle)
 
-            Text("\(Text(message.userName).font(.headline)): \(Text(message.message).font(.body))")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("\(name): \(message.message)")
+                Button {
+                    Task { await model.toggleLike(message) }
+                } label: {
+                    Label(
+                        "\(model.likeCount(message))",
+                        systemImage: model.isLiked(message) ? "hand.thumbsup.fill" : "hand.thumbsup"
+                    )
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(model.isLiked(message) ? "Remove like" : "Add like")
+                .disabled(model.isLikePending(message))
+            }
+            Spacer(minLength: 0)
+            Menu {
+                Button("Report message") { Task { await model.report(message) } }
+                if model.canDelete(message) {
+                    Button("Delete message", role: .destructive) {
+                        Task { await model.delete(message) }
+                    }
+                }
+                Divider()
+                Button("Block user") { Task { await model.block(message) } }
+                Button("Unblock user") { Task { await model.unblock(message) } }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .accessibilityLabel("Message actions")
         }
     }
 }
