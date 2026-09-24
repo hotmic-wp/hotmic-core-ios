@@ -16,8 +16,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "HotMicCore",
-            url: "https://github.com/hotmic-wp/hotmic-core-ios/releases/download/1.0.1/HotMicCore.xcframework.zip",
-            checksum: "5f59f096d1323e1e0075fd67e9d1ab9c84b8f11406d77e46de9010734600222e"
+            url: "https://github.com/hotmic-wp/hotmic-core-ios/releases/download/1.0.2/HotMicCore.xcframework.zip",
+            checksum: "d26c2301b5bf878911dbc195f18a959a674eecf2510ed5fa972e51a018a41c98"
         )
     ]
 )
