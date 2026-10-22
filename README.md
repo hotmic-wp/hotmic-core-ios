@@ -99,16 +99,35 @@ These requests return `HotMicStreamSummary`; full `HotMicStream` details are pro
 
 ### Live Summaries
 
-Use `fetchLiveSummaries(streamIDs:commentLimit:)` to put viewer counts and recent
+Use `fetchLiveSummaries(streamIDs:commentLimit:minCharacterCount:maxCharacterCount:)` to put viewer counts and recent
 comments on live tiles without opening chat. No stream session or presence is
 needed, so the caller does not count as a viewer. Use the usual API key and viewer
 access token; authentication is still required.
 
-Pass 1–20 unique stream IDs and a comment limit from 0–5 (default 2). Core trims
+Pass 1–20 unique stream IDs and a comment limit from 0–20 (default 2). Core trims
 whitespace, drops empty IDs, and removes duplicates while keeping request order.
 Each ID must contain 1–64 ASCII letters, digits, underscores or hyphens. Invalid
 input throws `HotMicError.invalidRequest` before a request is sent. A limit of 0
-omits recent comments; a pinned comment can still be returned.
+omits recent comments. A pinned comment is always returned when set on an available
+stream, unaffected by the limit or character filters and not counted in `commentLimit`.
+
+Optional `minCharacterCount` and `maxCharacterCount` are inclusive whole-number
+bounds from 0–10000. When both are supplied, the maximum must be at least the minimum.
+Invalid bounds throw `HotMicError.invalidRequest` before networking. Lengths count
+**Unicode code points**: use Swift `text.unicodeScalars.count`, not `text.count`
+(which counts grapheme clusters). For example, `"e\u{301}"` has 2 code points but
+1 grapheme cluster. The server filters the newest 200 visible comments, then takes
+the newest up to `commentLimit` matches, returned oldest first. Older matching
+comments outside that window are not returned.
+
+```swift
+let page = try await client.fetchLiveSummaries(
+    streamIDs: ["stream-1", "stream-2"],
+    commentLimit: 20,
+    minCharacterCount: 10,
+    maxCharacterCount: 140
+)
+```
 
 The returned `HotMicLiveSummaryPage` has `generatedAt`, `pollInterval` in seconds,
 and `streams` in request order. Each summary has `streamID`, `found`, `deleted`,
@@ -186,7 +205,7 @@ await pollingTask.value
 All three summary models have public memberwise initializers for host tests and previews.
 
 A main-actor completion-handler overload is also available:
-`client.fetchLiveSummaries(streamIDs:commentLimit:completion:)`.
+`client.fetchLiveSummaries(streamIDs:commentLimit:minCharacterCount:maxCharacterCount:completion:)`.
 
 ### Stream Session
 
