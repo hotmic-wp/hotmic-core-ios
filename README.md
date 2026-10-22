@@ -7,6 +7,7 @@ See [MIGRATION.md](MIGRATION.md) to migrate to HotMicCore from HotMicMediaPlayer
 ## Features
 
 - Fetch live, scheduled, and video-on-demand replay streams
+- Fetch live viewer counts and recent comments for up to 20 streams without a session
 - Retrieve stream and user information
 - Observe stream updates
 - Build a chat interface using the HotMic service
@@ -95,6 +96,97 @@ let stream = try await hotMic.fetchStream(id: streamID)
 ```
 
 These requests return `HotMicStreamSummary`; full `HotMicStream` details are provided when a stream session is started.
+
+### Live Summaries
+
+Use `fetchLiveSummaries(streamIDs:commentLimit:)` to put viewer counts and recent
+comments on live tiles without opening chat. No stream session or presence is
+needed, so the caller does not count as a viewer. Use the usual API key and viewer
+access token; authentication is still required.
+
+Pass 1–20 unique stream IDs and a comment limit from 0–5 (default 2). Core trims
+whitespace, drops empty IDs, and removes duplicates while keeping request order.
+Each ID must contain 1–64 ASCII letters, digits, underscores or hyphens. Invalid
+input throws `HotMicError.invalidRequest` before a request is sent. A limit of 0
+omits recent comments; a pinned comment can still be returned.
+
+The returned `HotMicLiveSummaryPage` has `generatedAt`, `pollInterval` in seconds,
+and `streams` in request order. Each summary has `streamID`, `found`, `deleted`,
+optional `state`, `viewersCount` and `pinnedComment`, `comments` (oldest first), and
+`updatedAt`. A requested ID the server does not return is omitted. Handle `found == false` and `deleted == true` by hiding or replacing
+the tile. Viewer counts may be unavailable rather than zero.
+
+Summaries are shared and cached per tenant. **Comments are not filtered for the
+viewer's blocks.** Filter both recent and pinned comments by `userID` before
+rendering. Author IDs and dates can be absent; choose how your app handles those
+comments. A pinned comment may also be present in `comments`.
+
+Core starts no polling task. The host should poll at the returned `pollInterval`
+and cancel its task when the tiles leave the screen. This SwiftUI-free example
+prints tile values; replace the print calls with your app's rendering code:
+
+```swift
+import Foundation
+import HotMicCore
+
+func startLiveTilePolling(
+    client: HotMicClient,
+    streamIDs: [String],
+    blockedUserIDs: Set<String>
+) -> Task<Void, Never> {
+    Task {
+        do {
+            while !Task.isCancelled {
+                let page = try await client.fetchLiveSummaries(
+                    streamIDs: streamIDs,
+                    commentLimit: 2
+                )
+                try Task.checkCancellation()
+                for summary in page.streams {
+                    guard summary.found, !summary.deleted else {
+                        print("Hide tile", summary.streamID)
+                        continue
+                    }
+                    let visible = summary.comments.filter { comment in
+                        // This example hides comments with an unknown author.
+                        guard let id = comment.userID else { return false }
+                        return !blockedUserIDs.contains(id)
+                    }
+                    let pinned = summary.pinnedComment.flatMap { comment in
+                        guard let id = comment.userID,
+                              !blockedUserIDs.contains(id) else { return nil as HotMicLiveSummaryComment? }
+                        return comment
+                    }
+                    print(summary.streamID, summary.viewersCount as Any)
+                    print("Recent:", visible.map(\.text), "Pinned:", pinned?.text as Any)
+                }
+                try await Task.sleep(for: .seconds(page.pollInterval))
+            }
+        } catch is CancellationError {
+            // Cancelling during the sleep exits here.
+        } catch HotMicError.cancelled {
+            // Cancelling during the request exits here.
+        } catch {
+            print("Live summaries failed:", error)
+            // Let the host decide when to retry, with backoff.
+        }
+    }
+}
+
+let pollingTask = startLiveTilePolling(
+    client: client,
+    streamIDs: ["stream-1", "stream-2"],
+    blockedUserIDs: blockedUserIDs
+)
+// When the tiles are no longer visible (or blocks/IDs change):
+pollingTask.cancel()
+await pollingTask.value
+```
+
+All three summary models have public memberwise initializers for host tests and previews.
+
+A main-actor completion-handler overload is also available:
+`client.fetchLiveSummaries(streamIDs:commentLimit:completion:)`.
 
 ### Stream Session
 
