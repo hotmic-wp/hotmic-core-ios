@@ -3,14 +3,27 @@ import HotMicCore
 
 struct StreamsView: View {
     @State private var model = StreamsModel(
-        apiKey: HotMicCoreExampleApp.defaultAPIKey,
-        accessToken: HotMicCoreExampleApp.defaultAccessToken
+        apiKey: "",
+        accessToken: ""
     )
     @State private var isShowingSettings = false
 
     var body: some View {
         NavigationStack {
-            Group {
+            VStack(spacing: 0) {
+                if !model.apiKey.isEmpty && !model.accessToken.isEmpty {
+                    Picker("Streams", selection: $model.filter) {
+                        ForEach(StreamsModel.Filter.allCases) { filter in
+                            Text(filter.title).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding()
+                    .disabled(model.isLoading)
+                    .onChange(of: model.filter) { _, _ in
+                        Task { await model.refresh() }
+                    }
+                }
                 if model.isLoading && model.streams.isEmpty {
                     ProgressView("Loading streams…")
                 } else if model.streams.isEmpty {
@@ -48,7 +61,7 @@ struct StreamsView: View {
 
 private struct StreamsList: View {
     let model: StreamsModel
-    
+
     var body: some View {
         List {
             if let errorMessage = model.errorMessage {

@@ -52,7 +52,7 @@ private struct CredentialField: View {
 
     var body: some View {
         HStack {
-            TextField(title, text: $text, prompt: Text(title))
+            SecureField(title, text: $text, prompt: Text(title))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
 

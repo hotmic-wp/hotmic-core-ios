@@ -5,6 +5,20 @@ import HotMicCore
 @MainActor
 @Observable
 final class StreamsModel {
+    enum Filter: String, CaseIterable, Identifiable {
+        case all, live, scheduled, vod
+
+        var id: Self { self }
+        var title: String {
+            switch self {
+            case .all: "All"
+            case .live: "Live"
+            case .scheduled: "Soon"
+            case .vod: "Replay"
+            }
+        }
+    }
+
     private(set) var client: HotMicClient
     private(set) var apiKey: String
     private(set) var accessToken: String
@@ -13,7 +27,8 @@ final class StreamsModel {
     private(set) var pagination: HotMicStreamPage.Pagination?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
-    
+    var filter: Filter = .all
+
     var hasNextPage: Bool {
         pagination?.hasNext == true
     }
@@ -47,6 +62,10 @@ final class StreamsModel {
 
     private func load(page: Int, replacing: Bool) async {
         guard !isLoading else { return }
+        guard !apiKey.isEmpty, !accessToken.isEmpty else {
+            errorMessage = "Add an API key and access token in Settings."
+            return
+        }
 
         isLoading = true
         errorMessage = nil
@@ -54,7 +73,13 @@ final class StreamsModel {
 
         do {
             let result = try await client.fetchStreams(
-                matching: HotMicStreamQuery(page: page, limit: 10)
+                matching: HotMicStreamQuery(
+                    includesLive: filter == .all || filter == .live,
+                    includesScheduled: filter == .all || filter == .scheduled,
+                    includesVOD: filter == .all || filter == .vod,
+                    page: page,
+                    limit: 10
+                )
             )
 
             if replacing {
@@ -67,12 +92,12 @@ final class StreamsModel {
             errorMessage = error.localizedDescription
         }
     }
-    
+
     private static func makeClient(apiKey: String, accessToken: String) -> HotMicClient {
         HotMicClient(
             apiKey: apiKey,
             accessToken: accessToken,
-            logLevel: .debug
+            logLevel: .error
         )
     }
 }

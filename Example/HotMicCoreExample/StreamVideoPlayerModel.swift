@@ -25,6 +25,9 @@ final class StreamVideoPlayerModel {
 
     func stop() {
         player.pause()
+        player.replaceCurrentItem(with: nil)
+        sourceURL = nil
+        stream = nil
     }
 
     private func updateSourceIfNeeded() {
