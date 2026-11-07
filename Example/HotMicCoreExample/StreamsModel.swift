@@ -18,6 +18,10 @@ final class StreamsModel {
         pagination?.hasNext == true
     }
 
+    var needsCredentials: Bool {
+        apiKey.isEmpty || accessToken.isEmpty
+    }
+
     init(apiKey: String, accessToken: String) {
         self.apiKey = apiKey
         self.accessToken = accessToken
@@ -46,7 +50,7 @@ final class StreamsModel {
     }
 
     private func load(page: Int, replacing: Bool) async {
-        guard !isLoading else { return }
+        guard !isLoading, !needsCredentials else { return }
 
         isLoading = true
         errorMessage = nil
