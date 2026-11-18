@@ -271,12 +271,12 @@ You can monitor `.stateChanged` events for transitions between `session.state` a
 
 Events also report changes to session content:
 
-- `.streamUpdated`, `.streamEnded`, and `.streamDeleted` report changes to the stream.
+- `.streamUpdated`, `.streamEnded`, and `.streamDeleted` report changes to the stream. `.streamEnded` and `.streamDeleted` are informational. Each fires at most once, and only when a poll shows a change from the stream's state when the session joined. A replay is already ended at join, so it emits neither event.
 - `.chatBatchReceived`, `.chatMessageDeleted`, and `.chatMessageReactionDeleted` report chat and reaction changes.
 - `.pollCreated`, `.pollUpdated`, and `.pollDeleted` report poll changes.
 - `.participantsUpdated` reports changes to participant groups.
 
-Call `stop()` and release the session when the experience closes. A stopped or failed session cannot be started again.
+An ended or deleted stream never stops the session or blocks chat, reactions, polls, or reports. Only `stop()` or releasing the session ends it. Call `stop()` and release the session when the experience closes. A stopped or failed session cannot be started again.
 
 ### Chat
 
