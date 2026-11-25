@@ -71,7 +71,7 @@ let hotMic = HotMicClient(
 )
 ```
 
-The provider is called on the first request, and again only after HTTP 401. Return a currently valid token. For a guest, re-mint `POST /auth/anonymous` with the same `hm-device-id` and return the new access token. Concurrent 401s share one provider call. The request is retried once. A second 401, or an error from the provider, throws `HotMicError.unauthorized`. HTTP 500 and transport failures, including timeouts, are not retried. The token is never logged. Live sessions and polling keep running across a successful refresh.
+The provider is called on the first request, and again only after HTTP 401. Return a currently valid token. For a guest, re-mint `POST /auth/anonymous` with the same `hm-device-id` and return the new access token. Concurrent 401s share one provider call. After a successful refresh, the SDK waits one second before asking the provider again. A provider call that never returns times out after 30 seconds. The request is retried once. A second 401, or an error from the provider, throws `HotMicError.unauthorized`. HTTP 500 and transport failures, including timeouts, are not retried. The token is never logged. Live sessions and polling keep running across a successful refresh.
 
 Logging is disabled by default. To enable diagnostics, specify `logLevel` in the initializer.
 
@@ -263,7 +263,7 @@ final class StreamController {
 }
 ```
 
-Keep a strong reference to the session and begin consuming `events`, or assign `eventHandler`, before starting it.
+Keep a strong reference to the session and begin consuming `events`, or assign `eventHandler`, before starting it. Use one `events` reader at a time and read `events` again after cancelling a reader. The content buffer holds up to 4,096 events. Assigning `eventHandler` before the first `events` read disables that content buffer.
 
 `start()` returns the initial stream, authenticated user, chat messages, polls, and participants. Session events report subsequent changes.
 
@@ -273,14 +273,14 @@ Events also report changes to session content:
 
 - `.streamUpdated`, `.streamEnded`, and `.streamDeleted` report changes to the stream. `.streamEnded` and `.streamDeleted` are informational. Each fires at most once, and only when a poll shows a change from the stream's state when the session joined. A replay is already ended at join, so it emits neither event.
 - `.chatBatchReceived`, `.chatMessageDeleted`, and `.chatMessageReactionDeleted` report chat and reaction changes.
-- `.pollCreated`, `.pollUpdated`, and `.pollDeleted` report poll changes.
+- `.pollCreated`, `.pollUpdated`, and `.pollDeleted` report poll changes. Partial poll catalogs update the valid polls. Only a complete catalog can establish that a poll was deleted.
 - `.participantsUpdated` reports changes to participant groups.
 
-An ended or deleted stream never stops the session or blocks chat, reactions, polls, or reports. Only `stop()` or releasing the session ends it. Call `stop()` and release the session when the experience closes. A stopped or failed session cannot be started again.
+An ended or deleted stream never stops the session or blocks chat, reactions, polls, or reports. Only `stop()` or releasing the session ends it. Call `stop()` and release the session when the experience closes. Only successful joins send `end_session` when the session stops. A stopped or failed session cannot be started again.
 
 ### Chat
 
-Chat messages are included in the initial session snapshot and updated through chat events.
+Chat messages are included in the initial session snapshot and updated through chat events. A chat the server accepted can appear in the sender's own chat batch if the send response failed. Chat dates with fractional seconds are supported on iOS 16.
 
 Send a message after the session has started:
 
